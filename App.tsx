@@ -4,13 +4,12 @@ import {
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
   Pin, Settings, Lock, CloudCog, Github, GitFork, MoreVertical,
-  QrCode, Copy, LayoutGrid, List, Check
+  QrCode, Copy, LayoutGrid, List, Check, ExternalLink
 } from 'lucide-react';
 import { 
     LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, 
     WebDavConfig, AIConfig, SiteSettings, SearchEngine, DEFAULT_SEARCH_ENGINES 
 } from './types';
-import { parseBookmarks } from './services/bookmarkParser';
 import Icon from './components/Icon';
 import LinkModal from './components/LinkModal';
 import AuthModal from './components/AuthModal';
@@ -20,8 +19,6 @@ import CategoryAuthModal from './components/CategoryAuthModal';
 import ImportModal from './components/ImportModal';
 import SettingsModal from './components/SettingsModal';
 
-// --- 配置项 ---
-// 项目核心仓库地址
 const GITHUB_REPO_URL = 'https://github.com/sese972010/CloudNav-';
 
 const LOCAL_STORAGE_KEY = 'cloudnav_data_cache';
@@ -33,14 +30,13 @@ function App() {
   // --- State ---
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('all'); // Renamed from selectedCategory, used for sidebar highlight
+  const [activeCategory, setActiveCategory] = useState<string>('all'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchEngine, setSearchEngine] = useState<SearchEngine>(DEFAULT_SEARCH_ENGINES[0]);
   const [showEngineDropdown, setShowEngineDropdown] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
-  // Site Settings
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({
       title: 'CloudNav - 我的导航',
       navTitle: '云航 CloudNav',
@@ -48,19 +44,15 @@ function App() {
       cardStyle: 'detailed'
   });
   
-  // Menu State
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  // Context Menu State (Right Click)
+  // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, link: LinkItem | null } | null>(null);
   
-  // QR Code State
   const [qrCodeLink, setQrCodeLink] = useState<LinkItem | null>(null);
 
-  // Category Security State
   const [unlockedCategoryIds, setUnlockedCategoryIds] = useState<Set<string>>(new Set());
 
-  // WebDAV Config State
   const [webDavConfig, setWebDavConfig] = useState<WebDavConfig>({
       url: '',
       username: '',
@@ -68,7 +60,6 @@ function App() {
       enabled: false
   });
 
-  // AI Config State
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
       const saved = localStorage.getItem(AI_CONFIG_KEY);
       if (saved) {
@@ -78,14 +69,12 @@ function App() {
       }
       return {
           provider: 'gemini',
-          // Try to use injected env if available, else empty.
           apiKey: process.env.API_KEY || '', 
           baseUrl: '',
           model: 'gemini-2.5-flash'
       };
   });
   
-  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
@@ -95,10 +84,8 @@ function App() {
   const [catAuthModalData, setCatAuthModalData] = useState<Category | null>(null);
   
   const [editingLink, setEditingLink] = useState<LinkItem | undefined>(undefined);
-  // State for data pre-filled from Bookmarklet
   const [prefillLink, setPrefillLink] = useState<Partial<LinkItem> | undefined>(undefined);
   
-  // Sync State
   const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [authToken, setAuthToken] = useState<string>('');
 
@@ -106,8 +93,8 @@ function App() {
   const isAutoScrollingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  
-  // --- Helpers & Sync Logic ---
+
+  // --- Helpers ---
 
   const loadFromLocal = () => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -160,34 +147,23 @@ function App() {
   };
 
   const updateData = (newLinks: LinkItem[], newCategories: Category[], newSettings: SiteSettings = siteSettings) => {
-      // 1. Optimistic UI Update
       setLinks(newLinks);
       setCategories(newCategories);
       setSiteSettings(newSettings);
-      
-      // 2. Save to Local Cache
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ links: newLinks, categories: newCategories, settings: newSettings }));
-
-      // 3. Sync to Cloud (if authenticated)
       if (authToken) {
           syncToCloud(newLinks, newCategories, newSettings, authToken);
       }
   };
 
-  // --- Effects ---
-
   useEffect(() => {
-    // Theme init
     if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       setDarkMode(true);
       document.documentElement.classList.add('dark');
     }
-
-    // Load Token
     const savedToken = localStorage.getItem(AUTH_KEY);
     if (savedToken) setAuthToken(savedToken);
 
-    // Load WebDAV Config
     const savedWebDav = localStorage.getItem(WEBDAV_CONFIG_KEY);
     if (savedWebDav) {
         try {
@@ -195,24 +171,20 @@ function App() {
         } catch (e) {}
     }
 
-    // Handle URL Params for Bookmarklet (Add Link)
     const urlParams = new URLSearchParams(window.location.search);
     const addUrl = urlParams.get('add_url');
     if (addUrl) {
         const addTitle = urlParams.get('add_title') || '';
-        // Clean URL params to avoid re-triggering on refresh
         window.history.replaceState({}, '', window.location.pathname);
-        
         setPrefillLink({
             title: addTitle,
             url: addUrl,
-            categoryId: 'common' // Default, Modal will handle selection
+            categoryId: 'common'
         });
         setEditingLink(undefined);
         setIsModalOpen(true);
     }
 
-    // Initial Data Fetch
     const initData = async () => {
         try {
             const res = await fetch('/api/storage');
@@ -235,7 +207,6 @@ function App() {
     initData();
   }, []);
 
-  // Update Document Title & Favicon
   useEffect(() => {
       document.title = siteSettings.title || 'CloudNav';
       const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
@@ -244,44 +215,51 @@ function App() {
       }
   }, [siteSettings]);
 
-  // Close menu when clicking outside
   useEffect(() => {
       const handleClickOutside = (e: MouseEvent) => {
           if (openMenuId) setOpenMenuId(null);
           if (showEngineDropdown) setShowEngineDropdown(false);
+          // Context menu close logic is handled by specific click or global click
           if (contextMenu && contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-              setContextMenu(null);
+             setContextMenu(null);
           }
       };
-      // Use capture to ensure we catch clicks anywhere
+      
+      const handleScroll = () => {
+         if (contextMenu) setContextMenu(null);
+      };
+
       window.addEventListener('click', handleClickOutside);
-      // Disable default context menu if ours is open
-      window.addEventListener('contextmenu', (e) => {
-         if (contextMenu) {
-             e.preventDefault();
-             setContextMenu(null);
-         }
-      });
+      window.addEventListener('scroll', handleScroll, true); 
+      
+      // Prevent default context menu if ours is open, but only on the menu itself
+      const handleGlobalContextMenu = (e: MouseEvent) => {
+          if (contextMenu) {
+              e.preventDefault();
+              setContextMenu(null);
+          }
+      }
+      window.addEventListener('contextmenu', handleGlobalContextMenu);
+
       return () => {
           window.removeEventListener('click', handleClickOutside);
+          window.removeEventListener('scroll', handleScroll, true);
+          window.removeEventListener('contextmenu', handleGlobalContextMenu);
       }
   }, [openMenuId, showEngineDropdown, contextMenu]);
 
-  // Scroll Spy Effect
   useEffect(() => {
     const handleScroll = () => {
         if (isAutoScrollingRef.current) return;
         if (!mainRef.current) return;
         
-        const scrollPosition = mainRef.current.scrollTop + 150; // Offset
+        const scrollPosition = mainRef.current.scrollTop + 150;
 
-        // If at top, highlight 'all'
         if (mainRef.current.scrollTop < 80) {
             setActiveCategory('all');
             return;
         }
 
-        // Iterate sections to find visible one
         let currentCatId = 'all';
         for (const cat of categories) {
             const el = document.getElementById(`cat-${cat.id}`);
@@ -290,17 +268,13 @@ function App() {
                 break;
             }
         }
-        
-        if (currentCatId !== 'all') {
-            setActiveCategory(currentCatId);
-        }
+        if (currentCatId !== 'all') setActiveCategory(currentCatId);
     };
 
     const mainEl = mainRef.current;
     if (mainEl) mainEl.addEventListener('scroll', handleScroll);
     return () => mainEl?.removeEventListener('scroll', handleScroll);
   }, [categories]);
-
 
   const toggleTheme = () => {
     const newMode = !darkMode;
@@ -314,8 +288,7 @@ function App() {
     }
   };
 
-  // --- Actions ---
-
+  // --- Handlers ---
   const handleLogin = async (password: string): Promise<boolean> => {
       try {
         const response = await fetch('/api/storage', {
@@ -341,14 +314,12 @@ function App() {
   };
 
   const handleImportConfirm = (newLinks: LinkItem[], newCategories: Category[]) => {
-      // Merge categories: Avoid duplicate names/IDs
       const mergedCategories = [...categories];
       newCategories.forEach(nc => {
           if (!mergedCategories.some(c => c.id === nc.id || c.name === nc.name)) {
               mergedCategories.push(nc);
           }
       });
-
       const mergedLinks = [...links, ...newLinks];
       updateData(mergedLinks, mergedCategories);
       setIsImportModalOpen(false);
@@ -363,7 +334,6 @@ function App() {
       createdAt: Date.now()
     };
     updateData([newLink, ...links], categories);
-    // Clear prefill if any
     setPrefillLink(undefined);
   };
 
@@ -390,13 +360,11 @@ function App() {
   
   const handleCopyLink = (text: string) => {
       navigator.clipboard.writeText(text);
-      // Small toast could be added here
   };
 
   const handleSaveAIConfig = (config: AIConfig, newSiteSettings: SiteSettings) => {
       setAiConfig(config);
       localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
-      // Save site settings too
       if (authToken) {
           updateData(links, categories, newSiteSettings);
       } else {
@@ -404,8 +372,6 @@ function App() {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ links, categories, settings: newSiteSettings }));
       }
   };
-
-  // --- Category Management & Security ---
 
   const scrollToCategory = (catId: string) => {
       setActiveCategory(catId);
@@ -417,11 +383,9 @@ function App() {
           setTimeout(() => isAutoScrollingRef.current = false, 800);
           return;
       }
-
       const el = document.getElementById(`cat-${catId}`);
       if (el) {
           isAutoScrollingRef.current = true;
-          // Offset for sticky header
           const top = el.offsetTop - 80;
           mainRef.current?.scrollTo({ top, behavior: 'smooth' });
           setTimeout(() => isAutoScrollingRef.current = false, 800);
@@ -430,7 +394,6 @@ function App() {
 
   const handleUnlockCategory = (catId: string) => {
       setUnlockedCategoryIds(prev => new Set(prev).add(catId));
-      // Unlock triggers re-render, content becomes visible
   };
 
   const handleUpdateCategories = (newCats: Category[], newLinks?: LinkItem[]) => {
@@ -441,19 +404,12 @@ function App() {
   const handleDeleteCategory = (catId: string) => {
       if (!authToken) { setIsAuthOpen(true); return; }
       const newCats = categories.filter(c => c.id !== catId);
-      // Move links to common or first available
       const targetId = 'common'; 
       const newLinks = links.map(l => l.categoryId === catId ? { ...l, categoryId: targetId } : l);
-      
-      // Ensure common exists if we deleted everything
-      if (newCats.length === 0) {
-          newCats.push(DEFAULT_CATEGORIES[0]);
-      }
-      
+      if (newCats.length === 0) newCats.push(DEFAULT_CATEGORIES[0]);
       updateData(newLinks, newCats);
   };
 
-  // --- WebDAV Config ---
   const handleSaveWebDavConfig = (config: WebDavConfig) => {
       setWebDavConfig(config);
       localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify(config));
@@ -464,8 +420,6 @@ function App() {
       setIsBackupModalOpen(false);
   };
   
-  // --- Search Logic ---
-  
   const handleSearchSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if (!searchQuery.trim()) return;
@@ -474,10 +428,7 @@ function App() {
           window.open(searchEngine.url + encodeURIComponent(searchQuery), '_blank');
           setSearchQuery('');
       }
-      // If local, query state already handled by memo
   };
-
-  // --- Filtering & Memo ---
 
   const isCategoryLocked = (catId: string) => {
       const cat = categories.find(c => c.id === catId);
@@ -486,17 +437,15 @@ function App() {
   };
 
   const pinnedLinks = useMemo(() => {
-      // Don't show pinned links if they belong to a locked category
       return links.filter(l => l.pinned && !isCategoryLocked(l.categoryId));
   }, [links, categories, unlockedCategoryIds]);
 
   const searchResults = useMemo(() => {
-    // Only filter locally if engine is local
+    // IMPORTANT: If engine is NOT local, we do NOT filter links.
+    // We only filter if engine is 'local'.
     if (searchEngine.id !== 'local') return links;
 
     let result = links;
-    
-    // Search Filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(l => 
@@ -507,7 +456,6 @@ function App() {
     }
     return result;
   }, [links, searchQuery, searchEngine]);
-
 
   // --- Render Components ---
 
@@ -534,12 +482,14 @@ function App() {
             rel="noopener noreferrer"
             onContextMenu={(e) => {
                 e.preventDefault();
-                // Get click coordinates relative to viewport
+                e.stopPropagation();
                 let x = e.clientX;
                 let y = e.clientY;
-                // Basic boundary check
+                // Boundary adjustment
                 if (x + 160 > window.innerWidth) x = window.innerWidth - 170;
+                if (y + 200 > window.innerHeight) y = window.innerHeight - 210;
                 setContextMenu({ x, y, link });
+                return false;
             }}
             className={`group relative flex flex-col ${isSimple ? 'p-2' : 'p-3'} bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:border-blue-200 dark:hover:border-slate-600 hover:-translate-y-0.5 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-750`}
             title={link.description || link.url}
@@ -552,7 +502,6 @@ function App() {
                     {link.title}
                 </h3>
             </div>
-            
             {!isSimple && (
                 <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 h-4 w-full overflow-hidden">
                     {link.description || <span className="opacity-0">.</span>}
@@ -562,33 +511,34 @@ function App() {
       );
   };
 
-
   return (
     <div className="flex h-screen overflow-hidden text-slate-900 dark:text-slate-50">
       
-      {/* Context Menu */}
+      {/* Right Click Context Menu */}
       {contextMenu && (
           <div 
              ref={contextMenuRef}
-             className="fixed z-[100] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-600 w-40 py-1.5 flex flex-col animate-in fade-in zoom-in duration-100"
+             className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-100 dark:border-slate-600 w-44 py-2 flex flex-col animate-in fade-in zoom-in duration-100 overflow-hidden"
              style={{ top: contextMenu.y, left: contextMenu.x }}
+             onClick={(e) => e.stopPropagation()}
+             onContextMenu={(e) => e.preventDefault()}
           >
-             <button onClick={() => { handleCopyLink(contextMenu.link!.url); setContextMenu(null); }} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">
-                 <Copy size={14}/> 复制链接
+             <button onClick={() => { handleCopyLink(contextMenu.link!.url); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+                 <Copy size={16} className="text-slate-400"/> <span>复制链接</span>
              </button>
-             <button onClick={() => { setQrCodeLink(contextMenu.link); setContextMenu(null); }} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">
-                 <QrCode size={14}/> 显示二维码
+             <button onClick={() => { setQrCodeLink(contextMenu.link); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+                 <QrCode size={16} className="text-slate-400"/> <span>显示二维码</span>
              </button>
-             <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"/>
-             <button onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(contextMenu.link!); setIsModalOpen(true); setContextMenu(null); }}} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">
-                 <Edit2 size={14}/> 编辑链接
+             <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"/>
+             <button onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(contextMenu.link!); setIsModalOpen(true); setContextMenu(null); }}} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+                 <Edit2 size={16} className="text-slate-400"/> <span>编辑链接</span>
              </button>
-             <button onClick={() => { togglePin(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">
-                 <Pin size={14} className={contextMenu.link!.pinned ? "fill-current text-blue-500" : ""}/> {contextMenu.link!.pinned ? '取消置顶' : '置顶'}
+             <button onClick={() => { togglePin(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+                 <Pin size={16} className={contextMenu.link!.pinned ? "fill-current text-blue-500" : "text-slate-400"}/> <span>{contextMenu.link!.pinned ? '取消置顶' : '置顶'}</span>
              </button>
-             <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"/>
-             <button onClick={() => { handleDeleteLink(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600">
-                 <Trash2 size={14}/> 删除链接
+             <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"/>
+             <button onClick={() => { handleDeleteLink(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors text-left">
+                 <Trash2 size={16}/> <span>删除链接</span>
              </button>
           </div>
       )}
@@ -673,17 +623,19 @@ function App() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-700 shrink-0 gap-3">
-             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/30">
-                 C
+             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/30 overflow-hidden">
+                 {siteSettings.favicon ? (
+                    <img src={siteSettings.favicon} alt="" className="w-full h-full object-cover" />
+                 ) : (
+                    "C"
+                 )}
              </div>
             <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent truncate">
               {siteSettings.navTitle || 'CloudNav'}
             </span>
         </div>
 
-        {/* Categories List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-hide">
             <button
               onClick={() => scrollToCategory('all')}
@@ -732,7 +684,6 @@ function App() {
             })}
         </div>
 
-        {/* Footer Actions */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
             <div className="grid grid-cols-3 gap-2 mb-2">
                 <button 
@@ -782,12 +733,10 @@ function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main 
           ref={mainRef}
           className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto relative scroll-smooth"
       >
-        {/* Header */}
         <header className="h-16 px-4 lg:px-8 flex items-center justify-between bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0">
           <div className="flex items-center gap-4 flex-1">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300">
@@ -843,12 +792,18 @@ function App() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-3 pr-4 py-2 bg-transparent border-none text-sm dark:text-white placeholder-slate-400 outline-none"
                     />
+                    
+                    {/* Visual Indicator for External Search */}
+                    {searchEngine.id !== 'local' && searchQuery && (
+                        <button type="submit" className="absolute right-2 p-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 rounded-full hover:bg-blue-200 transition-colors">
+                            <ArrowRight size={14} className="lucide-arrow-right" />
+                        </button>
+                    )}
                 </form>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Toggle */}
             <div className="hidden md:flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 mr-2">
                 <button 
                     onClick={() => authToken && updateData(links, categories, { ...siteSettings, cardStyle: 'simple' })}
@@ -885,10 +840,8 @@ function App() {
           </div>
         </header>
 
-        {/* Content Scroll Area */}
         <div className="p-4 lg:p-8 space-y-8">
             
-            {/* 1. Pinned Area */}
             {pinnedLinks.length > 0 && !searchQuery && (
                 <section>
                     <div className="flex items-center gap-2 mb-4">
@@ -903,15 +856,17 @@ function App() {
                 </section>
             )}
 
-            {/* 2. Main List - Stacked Categories */}
             {categories.map(cat => {
-                // Filter links for this category based on search
                 let catLinks = searchResults.filter(l => l.categoryId === cat.id);
-                // Security check
                 const isLocked = cat.password && !unlockedCategoryIds.has(cat.id);
                 
-                // If search is active and no links match, don't render category
-                if (searchQuery && catLinks.length === 0) return null;
+                // Logic Fix: If External Search, do NOT hide categories based on links
+                // Because external search doesn't filter links.
+                // However, the user probably wants to see the links grid even when typing for external search
+                // Current logic: if search query exists AND local search -> filter. 
+                // If search query exists AND external search -> show all (searchResults returns all).
+                
+                if (searchQuery && searchEngine.id === 'local' && catLinks.length === 0) return null;
 
                 return (
                     <section key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-24">
@@ -956,8 +911,8 @@ function App() {
                 );
             })}
             
-            {/* Empty State for Search */}
-            {searchQuery && searchResults.length === 0 && (
+            {/* Empty State for Local Search */}
+            {searchQuery && searchEngine.id === 'local' && searchResults.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                     <Search size={40} className="opacity-30 mb-4" />
                     <p>没有找到相关内容</p>
@@ -965,7 +920,7 @@ function App() {
                 </div>
             )}
 
-            <div className="h-20"></div> {/* Bottom Spacer */}
+            <div className="h-20"></div>
         </div>
       </main>
 
@@ -981,5 +936,24 @@ function App() {
     </div>
   );
 }
+
+// Add simple arrow right icon for search button
+const ArrowRight = ({ size, className }: { size: number, className?: string }) => (
+    <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        width={size} 
+        height={size} 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        className={className}
+    >
+        <path d="M5 12h14" />
+        <path d="m12 5 7 7-7 7" />
+    </svg>
+);
 
 export default App;
