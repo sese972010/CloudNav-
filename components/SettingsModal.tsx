@@ -187,6 +187,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }, 2000);
   };
 
+  const handleDownloadFile = (filename: string, content: string) => {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  };
+
   // --- Drag and Drop Logic ---
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -225,9 +237,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const json: any = {
         manifest_version: 3,
         name: localSiteSettings.navTitle || "CloudNav Assistant",
-        version: "1.2",
-        // Added 'storage' permission for caching
-        permissions: ["activeTab", "scripting", "sidePanel", "storage"], 
+        version: "1.3",
+        // Added 'storage' for cache, 'favicon' for reliable icons
+        permissions: ["activeTab", "scripting", "sidePanel", "storage", "favicon"], 
         action: {
             default_popup: "popup.html",
             default_title: `Save to ${localSiteSettings.navTitle || 'CloudNav'}`
@@ -369,6 +381,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 1. Render Page Info
     titleInput.value = tab.title;
     if (tab.favIconUrl) {
+       // Prefer chrome native favicon API if available in popup
+       // But popup usually relies on tabs API for current tab info
        iconImg.src = tab.favIconUrl;
        iconImg.style.display = 'block';
     }
@@ -490,41 +504,63 @@ document.addEventListener('DOMContentLoaded', async () => {
         body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding-bottom: 20px; }
         
         /* Search Bar */
-        .header { position: sticky; top: 0; padding: 12px; background: var(--bg); border-bottom: 1px solid var(--border); z-index: 10; display: flex; gap: 8px; }
-        .search-input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--hover); color: var(--text); outline: none; box-sizing: border-box; font-size: 14px; }
+        .header { position: sticky; top: 0; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--border); z-index: 10; display: flex; gap: 8px; }
+        .search-input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); outline: none; box-sizing: border-box; font-size: 13px; }
         .search-input:focus { border-color: var(--accent); }
         
-        .refresh-btn { width: 34px; display: flex; items-center; justify-content: center; border: 1px solid var(--border); background: var(--hover); border-radius: 8px; color: var(--muted); cursor: pointer; transition: all 0.2s; }
+        .refresh-btn { width: 30px; display: flex; items-center; justify-content: center; border: 1px solid var(--border); background: var(--hover); border-radius: 6px; color: var(--muted); cursor: pointer; transition: all 0.2s; }
         .refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
         .refresh-btn:active { transform: scale(0.95); }
         .rotating { animation: spin 1s linear infinite; }
         
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        /* Links List */
-        .content { padding: 8px; }
-        .cat-header { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin: 16px 8px 8px 8px; letter-spacing: 0.05em; display: flex; items-center; gap: 6px; }
-        .cat-icon { width: 14px; height: 14px; opacity: 0.7; }
+        /* Accordion Content */
+        .content { padding: 4px; }
         
-        .link-item { display: flex; items-center; gap: 10px; padding: 8px; border-radius: 8px; text-decoration: none; color: var(--text); transition: background 0.1s; }
-        .link-item:hover { background: var(--hover); }
+        .cat-group { margin-bottom: 2px; }
         
-        .link-icon { width: 24px; height: 24px; border-radius: 6px; background: var(--hover); display: flex; items-center; justify-content: center; font-size: 12px; font-weight: bold; overflow: hidden; flex-shrink: 0; color: var(--accent); }
-        .link-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .cat-header { 
+            padding: 8px 10px; 
+            font-size: 13px; 
+            font-weight: 600; 
+            color: var(--text); 
+            cursor: pointer; 
+            display: flex; 
+            items-center; 
+            gap: 8px; 
+            border-radius: 6px;
+            user-select: none;
+            transition: background 0.1s;
+        }
+        .cat-header:hover { background: var(--hover); }
+        
+        .cat-arrow { width: 14px; height: 14px; color: var(--muted); transition: transform 0.2s; }
+        .cat-header.active .cat-arrow { transform: rotate(90deg); color: var(--accent); }
+        
+        .cat-links { display: none; padding-left: 8px; margin-bottom: 8px; }
+        .cat-header.active + .cat-links { display: block; }
+        
+        /* Links */
+        .link-item { display: flex; items-center; gap: 8px; padding: 6px 8px; border-radius: 6px; text-decoration: none; color: var(--text); transition: background 0.1s; border-left: 2px solid transparent; }
+        .link-item:hover { background: var(--hover); border-left-color: var(--accent); }
+        
+        .link-icon { width: 16px; height: 16px; flex-shrink: 0; display: flex; items-center; justify-content: center; overflow: hidden; }
+        .link-icon img { width: 100%; height: 100%; object-fit: contain; }
         
         .link-info { min-width: 0; flex: 1; }
-        .link-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .link-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-
-        .empty { text-align: center; padding: 20px; color: var(--muted); font-size: 13px; }
-        .loading { display: flex; justify-content: center; padding: 40px; color: var(--accent); }
+        .link-title { font-size: 13px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+        
+        /* Empty States */
+        .empty { text-align: center; padding: 20px; color: var(--muted); font-size: 12px; }
+        .loading { display: flex; justify-content: center; padding: 40px; color: var(--accent); font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <input type="text" id="search" class="search-input" placeholder="搜索书签..." autocomplete="off">
+        <input type="text" id="search" class="search-input" placeholder="搜索..." autocomplete="off">
         <button id="refresh" class="refresh-btn" title="同步最新数据">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
         </button>
     </div>
     <div id="content" class="content">
@@ -547,16 +583,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     let allLinks = [];
     let allCategories = [];
+    // Store expanded categories
+    let expandedCats = new Set();
 
-    // Helper: SVG Icons
-    const getCatIcon = () => {
-        return '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cat-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 2H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>';
+    const getArrowIcon = () => {
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cat-arrow"><polyline points="9 18 15 12 9 6"></polyline></svg>';
     };
+
+    const getFaviconUrl = (pageUrl) => {
+        try {
+            const url = new URL(chrome.runtime.getURL("/_favicon/"));
+            url.searchParams.set("pageUrl", pageUrl);
+            url.searchParams.set("size", "32");
+            return url.toString();
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const toggleCat = (id) => {
+        const header = document.querySelector(\`.cat-header[data-id="\${id}"]\`);
+        if (header) {
+            header.classList.toggle('active');
+            if (header.classList.contains('active')) {
+                expandedCats.add(id);
+            } else {
+                expandedCats.delete(id);
+            }
+        }
+    };
+
+    // Attach global click listener for dynamic elements
+    container.addEventListener('click', (e) => {
+        const header = e.target.closest('.cat-header');
+        if (header) {
+            toggleCat(header.dataset.id);
+        }
+    });
 
     const render = (filter = '') => {
         const q = filter.toLowerCase();
         let html = '';
         let hasContent = false;
+        
+        // If searching, auto-expand all relevant categories
+        const isSearching = q.length > 0;
 
         allCategories.forEach(cat => {
             const catLinks = allLinks.filter(l => {
@@ -571,23 +642,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (catLinks.length === 0) return;
             hasContent = true;
 
-            html += \`<div class="cat-header">\${getCatIcon()} \${cat.name}</div>\`;
+            // Accordion Logic: Expand if user opened it previously OR if searching
+            const isOpen = expandedCats.has(cat.id) || isSearching;
+            const activeClass = isOpen ? 'active' : '';
+
+            html += \`
+            <div class="cat-group">
+                <div class="cat-header \${activeClass}" data-id="\${cat.id}">
+                    \${getArrowIcon()}
+                    <span>\${cat.name}</span>
+                </div>
+                <div class="cat-links">
+            \`;
             
             catLinks.forEach(link => {
-                const iconHtml = link.icon && link.icon.startsWith('http') 
-                    ? \`<img src="\${link.icon}" />\` 
-                    : link.title.charAt(0);
+                // Use Chrome Native Favicon API
+                const iconSrc = getFaviconUrl(link.url);
                 
                 html += \`
                     <a href="\${link.url}" target="_blank" class="link-item">
-                        <div class="link-icon">\${iconHtml}</div>
+                        <div class="link-icon"><img src="\${iconSrc}" /></div>
                         <div class="link-info">
                             <div class="link-title">\${link.title}</div>
-                            \${link.description ? \`<div class="link-desc">\${link.description}</div>\` : ''}
                         </div>
                     </a>
                 \`;
             });
+
+            html += \`</div></div>\`;
         });
 
         if (!hasContent) {
@@ -599,7 +681,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const loadData = async (forceRefresh = false) => {
         try {
-            // 1. Check Cache first (if not forcing)
             if (!forceRefresh) {
                 const cached = await chrome.storage.local.get(CACHE_KEY);
                 if (cached[CACHE_KEY]) {
@@ -611,7 +692,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
-            // 2. Fetch from Network
             refreshBtn.classList.add('rotating');
             container.innerHTML = '<div class="loading">同步数据中...</div>';
             
@@ -625,7 +705,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             allLinks = data.links || [];
             allCategories = data.categories || [];
             
-            // 3. Save to Cache
             await chrome.storage.local.set({ [CACHE_KEY]: data });
             
             render(searchInput.value);
@@ -636,10 +715,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    // Initial Load
     loadData();
 
-    // Listeners
     searchInput.addEventListener('input', (e) => render(e.target.value));
     refreshBtn.addEventListener('click', () => loadData(true));
 });`;
@@ -648,13 +725,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
         <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
             <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-300">{filename}</span>
-            <button 
-                onClick={() => handleCopy(code, filename)}
-                className="text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
-            >
-                {copiedStates[filename] ? <Check size={12}/> : <Copy size={12}/>}
-                {copiedStates[filename] ? 'Copied' : 'Copy'}
-            </button>
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={() => handleDownloadFile(filename, code)}
+                    className="text-xs flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                    title="下载文件"
+                >
+                    <Download size={12}/>
+                    Download
+                </button>
+                <div className="w-px h-3 bg-slate-300 dark:bg-slate-600"></div>
+                <button 
+                    onClick={() => handleCopy(code, filename)}
+                    className="text-xs flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                    {copiedStates[filename] ? <Check size={12}/> : <Copy size={12}/>}
+                    {copiedStates[filename] ? 'Copied' : 'Copy'}
+                </button>
+            </div>
         </div>
         <div className="bg-slate-900 p-3 overflow-x-auto">
             <pre className="text-[10px] md:text-xs font-mono text-slate-300 leading-relaxed whitespace-pre">
@@ -1027,7 +1115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <ol className="list-decimal list-inside text-sm text-slate-600 dark:text-slate-400 space-y-2 leading-relaxed">
                                     <li>在电脑上新建文件夹 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">CloudNav-Ext</code>。</li>
                                     <li><strong>[重要]</strong> 将下方图标保存为 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">icon.png</code>。</li>
-                                    <li>在文件夹中创建以下 5 个文件，分别复制下方代码。</li>
+                                    <li>在文件夹中创建以下 5 个文件。 <span className="text-red-500 dark:text-red-400 font-bold">注意：必须下载所有文件，特别是 sidebar.html，否则会报错。</span></li>
                                     <li>
                                         打开浏览器扩展管理页面 
                                         {browserType === 'chrome' ? (
@@ -1040,6 +1128,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     <li>点击 "<strong>加载已解压的扩展程序</strong>"，选择该文件夹。</li>
                                     <li><strong className="text-blue-600 dark:text-blue-400">新功能:</strong> 按下 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">Ctrl+Shift+E</code> 即可呼出侧边栏导航！</li>
                                 </ol>
+                                <div className="mt-3 text-xs p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded border border-amber-200 dark:border-amber-900/50 space-y-2">
+                                    <div><strong>常见错误:</strong> 如果提示 <em>"Side panel file path must exist"</em>，说明您忘记创建或错误命名了 <code>sidebar.html</code> 文件。请确保文件夹内包含所有5个代码文件。</div>
+                                    <div className="text-amber-800 dark:text-amber-300"><strong>快捷键无效?</strong> 如果按 <code className="font-mono">Ctrl+Shift+E</code> 没反应，请前往 <a href="chrome://extensions/shortcuts" className="underline" target="_blank">chrome://extensions/shortcuts</a> 手动绑定。</div>
+                                </div>
                             </div>
 
                             <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
