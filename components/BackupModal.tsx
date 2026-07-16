@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Cloud, Download, Upload, CheckCircle2, AlertCircle, RefreshCw, Save } from 'lucide-react';
 import { Category, LinkItem, WebDavConfig } from '../types';
 import { checkWebDavConnection, uploadBackup, downloadBackup } from '../services/webDavService';
+import type { WebDavResult } from '../services/webDavService';
 import { generateBookmarkHtml, downloadHtmlFile } from '../services/exportService';
 
 interface BackupModalProps {
@@ -20,6 +21,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
   const [config, setConfig] = useState<WebDavConfig>(webDavConfig);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
+  const [testError, setTestError] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'uploading' | 'downloading' | 'success' | 'error'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
 
@@ -27,15 +29,21 @@ const BackupModal: React.FC<BackupModalProps> = ({
     if(isOpen) {
         setConfig(webDavConfig);
         setTestResult(null);
+        setTestError('');
         setSyncStatus('idle');
+        setStatusMsg('');
     }
   }, [isOpen, webDavConfig]);
 
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
-    const success = await checkWebDavConnection(config);
-    setTestResult(success ? 'success' : 'fail');
+    setTestError('');
+    const result = await checkWebDavConnection(config);
+    setTestResult(result.success ? 'success' : 'fail');
+    if (!result.success && result.error) {
+        setTestError(result.error);
+    }
     setIsTesting(false);
   };
 
@@ -50,13 +58,13 @@ const BackupModal: React.FC<BackupModalProps> = ({
   const handleBackupToCloud = async () => {
     setSyncStatus('uploading');
     setStatusMsg('正在上传...');
-    const success = await uploadBackup(config, { links, categories });
-    if (success) {
+    const result = await uploadBackup(config, { links, categories });
+    if (result.success) {
         setSyncStatus('success');
         setStatusMsg('备份成功！');
     } else {
         setSyncStatus('error');
-        setStatusMsg('上传失败，请检查配置或网络。');
+        setStatusMsg(`上传失败：${result.error || '请检查配置或网络'}`);
     }
   };
 
@@ -65,15 +73,15 @@ const BackupModal: React.FC<BackupModalProps> = ({
     
     setSyncStatus('downloading');
     setStatusMsg('正在下载...');
-    const data = await downloadBackup(config);
+    const result = await downloadBackup(config);
     
-    if (data) {
-        onRestore(data.links, data.categories);
+    if (result.success && result.data) {
+        onRestore(result.data.links, result.data.categories);
         setSyncStatus('success');
         setStatusMsg('恢复成功！');
     } else {
         setSyncStatus('error');
-        setStatusMsg('下载失败或文件格式错误。');
+        setStatusMsg(`恢复失败：${result.error || '文件格式错误'}`);
     }
   };
 
@@ -163,6 +171,11 @@ const BackupModal: React.FC<BackupModalProps> = ({
                         {testResult === 'success' && <span className="text-xs text-green-500 flex items-center gap-1"><CheckCircle2 size={12}/> 连接成功</span>}
                         {testResult === 'fail' && <span className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={12}/> 连接失败</span>}
                     </div>
+                    {testResult === 'fail' && testError && (
+                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs text-red-600 dark:text-red-400">
+                            错误详情：{testError}
+                        </div>
+                    )}
                 </div>
             </section>
 
