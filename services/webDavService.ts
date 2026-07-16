@@ -65,7 +65,22 @@ const callWebDavProxy = async (operation: 'check' | 'upload' | 'download', confi
         return { success: true, data: result, status: webdavStatus || response.status };
     } catch (e: any) {
         console.error("WebDAV Proxy Network Error", e);
-        return { success: false, error: e?.message || '网络连接失败，请检查 API 服务是否运行' };
+        // "Failed to fetch" 通常意味着 /api/webdav 代理接口不可达
+        // 在 Cloudflare Pages 上，常见原因是 Functions 未正确部署或路径不匹配
+        const rawMsg = e?.message || 'Unknown error';
+        let friendlyMsg: string;
+        if (rawMsg === 'Failed to fetch' || rawMsg.includes('Failed to fetch')) {
+            friendlyMsg = '无法连接到备份服务（/api/webdav 代理接口不可达）。' +
+                '如果你在 Cloudflare Pages 上，请确认部署包含 functions/api/webdav.ts 且构建输出目录为 dist；' +
+                '如果在本地开发，请确认已运行 npm run dev。';
+        } else if (rawMsg.includes('CORS') || rawMsg.includes('cors')) {
+            friendlyMsg = '跨域请求被拒绝（CORS），请确认前端与 /api 同源部署。';
+        } else if (rawMsg.includes('network') || rawMsg.includes('Network')) {
+            friendlyMsg = '网络连接失败，请检查网络或稍后重试。';
+        } else {
+            friendlyMsg = rawMsg;
+        }
+        return { success: false, error: friendlyMsg };
     }
 }
 
